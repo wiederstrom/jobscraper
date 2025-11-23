@@ -304,7 +304,7 @@ class JobScraper:
         title = title_elem.get_text(strip=True)
 
         # Extract company and location
-        company_elements = soup.find_all('p', class_='overflow-wrap-anywhere navds-body-short navds-body-short--medium')
+        company_elements = soup.find_all('p', class_='navds-body-long navds-body-long--medium navds-typo--semibold')
         company = company_elements[0].get_text(strip=True) if len(company_elements) >= 1 else "Unknown"
         location = company_elements[1].get_text(strip=True) if len(company_elements) >= 2 else "Unknown"
 
