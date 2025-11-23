@@ -120,7 +120,7 @@ class JobScraper:
         jobs = []
         for job_url in job_links:
             try:
-                job_data = self._parse_finn_job(job_url)
+                job_data = self._parse_finn_job(job_url, keyword)
                 if job_data:
                     jobs.append(job_data)
                 time.sleep(0.5)  # Be polite
@@ -130,7 +130,7 @@ class JobScraper:
 
         return jobs
 
-    def _parse_finn_job(self, url: str) -> Optional[Dict]:
+    def _parse_finn_job(self, url: str, search_keyword: str) -> Optional[Dict]:
         """Parse a single FINN job page"""
         try:
             response = self.session.get(url, timeout=10)
@@ -195,10 +195,8 @@ class JobScraper:
         if description_element:
             description = description_element.get_text(separator='\n', strip=True)
 
-        # Check which keywords match
-        title_lower = title.lower()
-        matched_keywords = [kw for kw in KEYWORDS if kw.lower() in title_lower]
-        keywords_str = ', '.join(matched_keywords) if matched_keywords else 'data science'
+        # Use the search keyword that found this job
+        keywords_str = search_keyword
 
         return {
             'title': title,
@@ -278,7 +276,7 @@ class JobScraper:
         jobs = []
         for job_url in job_links:
             try:
-                job_data = self._parse_nav_job(job_url)
+                job_data = self._parse_nav_job(job_url, keyword)
                 if job_data:
                     jobs.append(job_data)
                 time.sleep(0.5)  # Be polite
@@ -288,7 +286,7 @@ class JobScraper:
 
         return jobs
 
-    def _parse_nav_job(self, url: str) -> Optional[Dict]:
+    def _parse_nav_job(self, url: str, search_keyword: str) -> Optional[Dict]:
         """Parse a single NAV job page"""
         try:
             response = self.session.get(url, timeout=10)
@@ -333,10 +331,8 @@ class JobScraper:
         if description_element:
             description = description_element.get_text(separator='\n', strip=True)
 
-        # Check which keywords match
-        title_lower = title.lower()
-        matched_keywords = [kw for kw in KEYWORDS if kw.lower() in title_lower]
-        keywords_str = ', '.join(matched_keywords) if matched_keywords else 'data science'
+        # Use the search keyword that found this job
+        keywords_str = search_keyword
 
         return {
             'title': title,
