@@ -1,0 +1,48 @@
+name: Scrape Jobs
+
+on:
+  schedule:
+    # Run twice daily: 7 AM and 5 PM UTC (8 AM and 6 PM Oslo time in winter)
+    - cron: '0 7,17 * * *'
+
+  # Allow manual triggering from Actions tab
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        FINN_LOCATION: ${{ secrets.FINN_LOCATION }}
+        NAV_COUNTY: ${{ secrets.NAV_COUNTY }}
+        NAV_MUNICIPAL: ${{ secrets.NAV_MUNICIPAL }}
+        MAX_JOBS_PER_KEYWORD: ${{ secrets.MAX_JOBS_PER_KEYWORD }}
+        MAX_KEYWORDS: ${{ secrets.MAX_KEYWORDS }}
+        KEYWORDS: ${{ secrets.KEYWORDS }}
+        LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+      run: python scraper.py
+
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: scraper-logs
+        path: |
+          *.log
+        retention-days: 7
