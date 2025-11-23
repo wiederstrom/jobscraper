@@ -36,6 +36,8 @@ jobs:
         MAX_KEYWORDS: ${{ secrets.MAX_KEYWORDS }}
         KEYWORDS: ${{ secrets.KEYWORDS }}
         LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        ENABLE_SUMMARIZATION: ${{ secrets.ENABLE_SUMMARIZATION }}
       run: python scraper.py
 
     - name: Upload logs on failure
