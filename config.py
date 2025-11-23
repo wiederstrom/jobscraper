@@ -45,10 +45,10 @@ else:
         'azure', 'aws', 'gcp', 'google cloud', 'docker', 'kubernetes',
 
         # BI & visualization
-        'tableau', 'power bi', 'looker', 'data visualization',
+        'tableau', 'power bi', 'data visualization',
 
         # Specializations
-        'nlp', 'natural language processing', 'computer vision',
+        'natural language processing', 'computer vision',
         'big data', 'data engineering', 'analytics', 'business intelligence'
     ]
 
