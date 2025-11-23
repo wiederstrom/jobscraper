@@ -62,6 +62,10 @@ USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
 # Logging settings
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
+# AI Summarization settings
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+ENABLE_SUMMARIZATION = os.getenv('ENABLE_SUMMARIZATION', 'false').lower() == 'true'
+
 def get_database_connection():
     """Get PostgreSQL database connection"""
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)

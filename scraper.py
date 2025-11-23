@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 import logging
 from typing import List, Dict, Optional
 import config
+from anthropic import Anthropic
 
 # Setup logging
 logging.basicConfig(
@@ -28,6 +29,12 @@ class JobScraper:
         self.session.headers.update({
             'User-Agent': config.USER_AGENT
         })
+
+        # Initialize Claude client if summarization is enabled
+        self.anthropic_client = None
+        if config.ENABLE_SUMMARIZATION and config.ANTHROPIC_API_KEY:
+            self.anthropic_client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
+            logger.info("AI summarization enabled with Claude Haiku")
 
     def setup_database(self):
         """Initialize PostgreSQL database with jobs table"""
@@ -55,6 +62,44 @@ class JobScraper:
         conn.commit()
 
         return conn
+
+    def summarize_description(self, description: str, title: str) -> Optional[str]:
+        """Generate a concise summary of job description using Claude"""
+        if not self.anthropic_client or not description:
+            return None
+
+        try:
+            prompt = f"""Oppsummer denne jobbeskrivelsen kort på norsk (maks 4-5 setninger).
+
+Stillingstittel: {title}
+
+Fokuser på:
+- Hovedansvar og arbeidsoppgaver
+- Viktigste kvalifikasjoner/kompetanse
+- Relevante teknologier eller verktøy
+
+Jobbeskrivelse:
+{description[:3000]}
+
+Gi en kort, konsis oppsummering:"""
+
+            message = self.anthropic_client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=300,
+                temperature=0.3,
+                messages=[{
+                    "role": "user",
+                    "content": prompt
+                }]
+            )
+
+            summary = message.content[0].text.strip()
+            logger.debug(f"Generated summary for: {title}")
+            return summary
+
+        except Exception as e:
+            logger.warning(f"Failed to summarize job '{title}': {e}")
+            return None
 
     # ===== FINN.NO SCRAPER =====
 
@@ -195,6 +240,9 @@ class JobScraper:
         if description_element:
             description = description_element.get_text(separator='\n', strip=True)
 
+        # Generate AI summary
+        summary = self.summarize_description(description, title) if description else None
+
         # Use the search keyword that found this job
         keywords_str = search_keyword
 
@@ -208,7 +256,8 @@ class JobScraper:
             'deadline': deadline,
             'job_type': job_type,
             'published': published,
-            'description': description
+            'description': description,
+            'summary': summary
         }
 
     # ===== NAV.NO SCRAPER =====
@@ -245,8 +294,9 @@ class JobScraper:
 
     def _scrape_nav_keyword(self, keyword: str) -> List[Dict]:
         """Scrape NAV.no for a specific keyword"""
-        # Add quotes for multi-word queries
-        query = f'"{keyword}"' if ' ' in keyword else keyword
+        # NAV.no doesn't support quoted queries well, use URL encoding instead
+        from urllib.parse import quote
+        query = quote(keyword)
 
         # Build search URL using configured location
         url = f"https://arbeidsplassen.nav.no/stillinger?county={config.NAV_COUNTY}&v=5&municipal={config.NAV_MUNICIPAL}&q={query}"
@@ -331,6 +381,9 @@ class JobScraper:
         if description_element:
             description = description_element.get_text(separator='\n', strip=True)
 
+        # Generate AI summary
+        summary = self.summarize_description(description, title) if description else None
+
         # Use the search keyword that found this job
         keywords_str = search_keyword
 
@@ -343,7 +396,8 @@ class JobScraper:
             'keywords': keywords_str,
             'deadline': deadline,
             'job_type': job_type,
-            'description': description
+            'description': description,
+            'summary': summary
         }
 
     # ===== DATABASE METHODS =====
@@ -359,11 +413,11 @@ class JobScraper:
         for job in jobs:
             try:
                 cursor.execute(
-                    '''INSERT INTO jobs (title, company, location, url, source, keywords, deadline, job_type, published, scraped_date, description)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                    '''INSERT INTO jobs (title, company, location, url, source, keywords, deadline, job_type, published, scraped_date, description, summary)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
                     (job['title'], job['company'], job.get('location'), job['url'],
                      job['source'], job['keywords'], job.get('deadline'), job.get('job_type'),
-                     job.get('published'), datetime.now(), job.get('description'))
+                     job.get('published'), datetime.now(), job.get('description'), job.get('summary'))
                 )
                 new_jobs.append(job)
                 logger.debug(f"Saved new job: {job['title']} from {job['source']}")
@@ -449,7 +503,7 @@ def main():
                     print(f"   Published: {job['published']}")
                 print(f"   URL: {job['url']}\n")
         else:
-            print("ℹ️  No new jobs found (all jobs already in database)\n")
+            print("No new jobs found (all jobs already in database)\n")
 
         # Show statistics
         all_saved_jobs = scraper.get_all_jobs()
