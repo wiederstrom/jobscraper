@@ -440,7 +440,7 @@ def main():
 
         if new_jobs:
             for job in new_jobs:
-                print(f"📌 {job['title']}")
+                print(f" {job['title']}")
                 print(f"   Company: {job['company']}")
                 print(f"   Location: {job.get('location', 'Unknown')}")
                 print(f"   Source: {job['source']}")
@@ -458,7 +458,7 @@ def main():
         # Show statistics
         all_saved_jobs = scraper.get_all_jobs()
         print("="*60)
-        print(f"📊 Total jobs in database: {len(all_saved_jobs)}")
+        print(f"Total jobs in database: {len(all_saved_jobs)}")
 
         # Stats by source
         finn_count = sum(1 for j in all_saved_jobs if j['source'] == 'FINN')
