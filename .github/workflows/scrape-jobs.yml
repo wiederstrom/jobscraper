@@ -2,7 +2,7 @@ name: Scrape Jobs
 
 on:
   schedule:
-    # Run twice daily: 7 AM and 5 PM UTC (8 AM and 6 PM Oslo time in winter)
+    # Run twice daily: 7 AM and 5 PM UTC
     - cron: '0 7,17 * * *'
 
   # Allow manual triggering from Actions tab
@@ -28,16 +28,24 @@ jobs:
 
     - name: Run scraper
       env:
+        # Database
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        
+        # Scraper Config (using secrets for all overrides)
         FINN_LOCATION: ${{ secrets.FINN_LOCATION }}
         NAV_COUNTY: ${{ secrets.NAV_COUNTY }}
         NAV_MUNICIPAL: ${{ secrets.NAV_MUNICIPAL }}
         MAX_JOBS_PER_KEYWORD: ${{ secrets.MAX_JOBS_PER_KEYWORD }}
         MAX_KEYWORDS: ${{ secrets.MAX_KEYWORDS }}
-        KEYWORDS: ${{ secrets.KEYWORDS }}
+        KEYWORDS: ${{ secrets.KEYWORDS }} # Optional keyword override
+        
+        # Logging
         LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+        
+        # AI Config
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         ENABLE_SUMMARIZATION: ${{ secrets.ENABLE_SUMMARIZATION }}
+        ENABLE_AI_FILTER: ${{ secrets.ENABLE_AI_FILTER }}
       run: python scraper.py
 
     - name: Upload logs on failure
