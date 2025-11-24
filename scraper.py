@@ -189,7 +189,7 @@ class JobScraper:
         # Add quotes for multi-word queries
         query = f'"{keyword}"' if ' ' in keyword else keyword
 
-        url = f"https://www.finn.no/job/search?location={config.FINN_LOCATION}&q={query}" [cite: 1]
+        url = f"https://www.finn.no/job/search?location={config.FINN_LOCATION}&q={query}"
 
         try:
             response = self.session.get(url, timeout=10)
@@ -210,7 +210,7 @@ class JobScraper:
                 job_links.append(href)
 
         # Remove duplicates and limit per keyword
-        job_links = list(set(job_links))[:config.MAX_JOBS_PER_KEYWORD] [cite: 1]
+        job_links = list(set(job_links))[:config.MAX_JOBS_PER_KEYWORD]
 
         # Scrape each job
         jobs = []
@@ -320,7 +320,7 @@ class JobScraper:
         query = quote(keyword)
 
         # Build search URL using configured location
-        url = f"https://arbeidsplassen.nav.no/stillinger?county={config.NAV_COUNTY}&v=5&municipal={config.NAV_MUNICIPAL}&q={query}" [cite: 1]
+        url = f"https://arbeidsplassen.nav.no/stillinger?county={config.NAV_COUNTY}&v=5&municipal={config.NAV_MUNICIPAL}&q={query}"
 
         try:
             response = self.session.get(url, timeout=10)
@@ -341,7 +341,7 @@ class JobScraper:
                 job_links.append(href)
 
         # Remove duplicates and limit per keyword
-        job_links = list(set(job_links))[:config.MAX_JOBS_PER_KEYWORD] [cite: 1]
+        job_links = list(set(job_links))[:config.MAX_JOBS_PER_KEYWORD]
 
         # Scrape each job
         jobs = []
