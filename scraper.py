@@ -374,26 +374,11 @@ class JobScraper:
             return None
         title = title_elem.get_text(strip=True)
 
-        company = "Unknown"
-        location = "Unknown"
-
-        # Robust extraction of Company and Location using SVG titles (Arbeidsgiver, Sted)
-        metadata_stacks = soup.find_all('div', class_='navds-stack mb-2 navds-hstack navds-stack-gap')
-
-        for stack in metadata_stacks:
-            svg_title = stack.select_one('svg title')
-            if svg_title:
-                info_type = svg_title.get_text(strip=True)
-                text_element = stack.select_one('p.navds-body-long--medium.navds-typo--semibold')
-                
-                if text_element:
-                    value = text_element.get_text(strip=True)
-                    
-                    if info_type == 'Arbeidsgiver':
-                        company = value
-                    elif info_type == 'Sted':
-                        location = value
-
+        # Gjeninnført den fungerende indekseringsbaserte logikken
+        company_elements = soup.find_all('p', class_='navds-body-long navds-body-long--medium navds-typo--semibold')
+        company = company_elements[0].get_text(strip=True) if len(company_elements) >= 1 else "Unknown"
+        location = company_elements[1].get_text(strip=True) if len(company_elements) >= 2 else "Unknown"
+        
         # Extract deadline
         deadline = None
         for p_tag in soup.find_all('p', class_='navds-body-long navds-body-long--medium'):
