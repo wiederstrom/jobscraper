@@ -110,7 +110,7 @@ Kriterier for NEI:
 - Søkeordet er bare nevnt som et verktøy/nice-to-have, men er ikke kjernen i jobben
 - For "data engineer": jobben er "electrical engineer" eller annet ingeniørfelt som tilfeldigvis nevner data
 - For "power bi": jobben er controller/økonom som bare bruker Power BI til rapportering
-
+- Jobben er et stipendiat, eller en jobb innen forskning
 Svar:"""
 
 
