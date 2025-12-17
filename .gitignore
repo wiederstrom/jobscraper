@@ -28,14 +28,22 @@ build/
 .ipynb_checkpoints/
 
 # Test files
-test_*.html
-*_test_output.html
-test_*.py
+.pytest_cache/
+.coverage
+htmlcov/
+*.coverage.*
 
 # Exports
 *.csv
 
-# Old/backup files
-scraper\ copy.py
-*_backup.py
-.env.gcp
+# Database
+*.db
+*.sqlite
+
+# Docker
+docker-compose.override.yml
+
+# Old prototype files (kept in old/ directory)
+# scraper.py
+# config.py
+# dashboard.py

@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+old/
+test_scripts/
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.env.*
+
+# Documentation
+*.md
+README.md
+
+# Other
+dashboard.py
+config.yaml
+generate_keys.py
+Procfile
+runtime.txt
+dashboard_requirements.txt
+requirements-dev.txt

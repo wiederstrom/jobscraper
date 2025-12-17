@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://jobscraper:password@db:5432/jobscraper
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - NAV_API_TOKEN=${NAV_API_TOKEN}
+      - FINN_LOCATION=${FINN_LOCATION:-2.20001.22046.20220}
+      - NAV_COUNTY=${NAV_COUNTY:-VESTLAND}
+      - NAV_MUNICIPAL=${NAV_MUNICIPAL:-VESTLAND.BERGEN}
+      - ENABLE_SUMMARIZATION=${ENABLE_SUMMARIZATION:-true}
+      - ENABLE_AI_FILTER=${ENABLE_AI_FILTER:-true}
+      - MAX_JOBS_PER_KEYWORD=${MAX_JOBS_PER_KEYWORD:-100}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      - db
+    volumes:
+      # Mount source code for hot reload during development
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+    command: >
+      sh -c "
+        python scripts/init_db.py &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    networks:
+      - jobscraper-network
+
+  # PostgreSQL database
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: jobscraper
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: jobscraper
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - jobscraper-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobscraper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  jobscraper-network:
+    driver: bridge
