@@ -32,6 +32,11 @@ build/
 .coverage
 htmlcov/
 *.coverage.*
+TESTING.md
+backend/TESTING.md
+backend/test.db
+test.db
+requirements-dev.txt
 
 # Exports
 *.csv
@@ -42,8 +47,3 @@ htmlcov/
 
 # Docker
 docker-compose.override.yml
-
-# Old prototype files (kept in old/ directory)
-# scraper.py
-# config.py
-# dashboard.py
