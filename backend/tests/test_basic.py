@@ -33,10 +33,11 @@ def test_api_endpoints(client):
     assert data["version"] == "1.0.0"
 
     # Test health endpoint
-    response = client.get("/health")
+    response = client.get("/api/v1/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
+    assert data["database"] == "healthy"
     assert "ai_enabled" in data
 
 

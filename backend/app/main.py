@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.utils.logging import setup_logging
+from app.api.v1.router import api_router
 
 
 # Set up logging
@@ -39,11 +40,14 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include API v1 router
+app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/")
@@ -52,16 +56,8 @@ async def root():
     return {
         "message": "Job Scraper API",
         "version": "1.0.0",
-        "docs": "/docs"
-    }
-
-
-@app.get("/health")
-async def health_check():
-    """Basic health check endpoint"""
-    return {
-        "status": "healthy",
-        "ai_enabled": settings.enable_summarization or settings.enable_ai_filter
+        "docs": "/docs",
+        "api": settings.api_v1_prefix
     }
 
 

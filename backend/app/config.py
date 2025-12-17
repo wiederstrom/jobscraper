@@ -115,9 +115,10 @@ class Settings(BaseSettings):
     )
 
     # CORS
-    cors_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:5173"],
-        description="Allowed CORS origins for React frontend"
+    cors_origins: str = Field(
+        default="http://localhost:3000,http://localhost:5173",
+        alias="CORS_ORIGINS",
+        description="Comma-separated list of allowed CORS origins for React frontend"
     )
 
     # API settings
@@ -147,6 +148,10 @@ class Settings(BaseSettings):
         if self.keywords:
             return [kw.strip() for kw in self.keywords.split(',')]
         return DEFAULT_KEYWORDS
+
+    def get_cors_origins(self) -> List[str]:
+        """Parse CORS origins from comma-separated string"""
+        return [origin.strip() for origin in self.cors_origins.split(',')]
 
 
 # Default keywords list (preserved from old config.py)

@@ -3,13 +3,15 @@ Pytest configuration and fixtures
 """
 
 import pytest
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
+
+# Set test environment variables before importing app modules
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["ANTHROPIC_API_KEY"] = "test-key"
 
 from app.db.models import Base
-from app.main import app
-from app.api.dependencies import get_db
 
 
 # Test database URL (use SQLite for testing)
@@ -40,6 +42,9 @@ def db_session():
 @pytest.fixture(scope="function")
 def client(db_session):
     """Create a test client with database dependency override"""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.api.dependencies import get_db
 
     def override_get_db():
         try:
