@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.utils.logging import setup_logging
 from app.api.v1.router import api_router
+from app.services.scheduler import scheduler
 
 
 # Set up logging
@@ -23,10 +24,16 @@ async def lifespan(app: FastAPI):
     logger.info(f"Database URL: {settings.database_url[:30]}...")
     logger.info(f"AI Features - Summarization: {settings.enable_summarization}, Filter: {settings.enable_ai_filter}")
 
+    # Start background scheduler
+    scheduler.start()
+    logger.info("Background job scheduler started")
+
     yield
 
     # Shutdown
     logger.info("Shutting down Job Scraper API...")
+    scheduler.shutdown()
+    logger.info("Background job scheduler shut down")
 
 
 # Create FastAPI application

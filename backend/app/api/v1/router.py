@@ -4,7 +4,7 @@ API v1 router - aggregates all v1 endpoints
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import health, jobs, stats
+from app.api.v1.endpoints import health, jobs, stats, scheduler
 
 # Create API v1 router
 api_router = APIRouter()
@@ -13,3 +13,4 @@ api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
 api_router.include_router(jobs.router, tags=["Jobs"])
 api_router.include_router(stats.router, tags=["Statistics"])
+api_router.include_router(scheduler.router, prefix="/scheduler", tags=["Scheduler"])
