@@ -71,10 +71,8 @@ class JobManager:
                         stats['jobs_duplicate'] += 1
                         continue
 
-                    # Fetch full job details
-                    details = await self.finn_scraper.fetch_job_details(job_data['url'])
-                    if details:
-                        job_data.update(details)
+                    # Job data already includes full details from scraper
+                    # No need to fetch details separately
 
                     # AI filtering (if enabled)
                     if self.ai_service.is_enabled() and job_data.get('description'):
