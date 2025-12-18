@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class FINNScraper:
     """Scraper for FINN.no job listings"""
 
-    BASE_URL = "https://www.finn.no/job/fulltime/search.html"
+    BASE_URL = "https://www.finn.no/job/search"
 
     def __init__(self):
         self.headers = {
@@ -31,7 +31,10 @@ class FINNScraper:
 
     async def search_jobs(self, keyword: str, location: str = None, limit: int = 100) -> List[Dict]:
         """
-        Search for jobs on FINN.no by keyword
+        Search for jobs on FINN.no by keyword (two-step process)
+
+        Step 1: Get job URLs from search page
+        Step 2: Scrape each job detail page
 
         Args:
             keyword: Search keyword
@@ -44,29 +47,56 @@ class FINNScraper:
         location = location or settings.finn_location
         jobs = []
 
+        # Add quotes for multi-word queries (like original scraper)
+        query = f'"{keyword}"' if ' ' in keyword else keyword
+
         params = {
-            'q': keyword,
-            'location': location,
-            'sort': 'PUBLISHED_DESC'
+            'q': query,
+            'location': location
         }
 
         url = f"{self.BASE_URL}?{urlencode(params)}"
         logger.info(f"Scraping FINN.no for keyword: {keyword}")
 
         try:
-            async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
+            async with httpx.AsyncClient(timeout=settings.request_timeout, follow_redirects=True) as client:
+                # Step 1: Get search results page to find job URLs
                 response = await client.get(url, headers=self.headers)
                 response.raise_for_status()
 
-                soup = BeautifulSoup(response.content, 'html.parser')
-                job_listings = soup.find_all('article', class_='sf-search-ad', limit=limit)
+                soup = BeautifulSoup(response.content, 'lxml')
 
-                for listing in job_listings:
-                    job = self._parse_job_listing(listing, keyword)
-                    if job:
-                        jobs.append(job)
+                # Find all links containing '/job/ad/' (individual job postings)
+                job_urls = []
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    if '/job/ad/' in href:
+                        if href.startswith('/'):
+                            href = f"https://www.finn.no{href}"
+                        job_urls.append(href)
 
-                logger.info(f"Found {len(jobs)} jobs for keyword '{keyword}'")
+                # Remove duplicates and limit
+                job_urls = list(set(job_urls))[:limit]
+
+                logger.info(f"Found {len(job_urls)} job URLs for keyword '{keyword}'")
+
+                # Step 2: Fetch each job detail page
+                for job_url in job_urls:
+                    try:
+                        job_data = await self._fetch_and_parse_job(client, job_url, keyword)
+                        if job_data:
+                            jobs.append(job_data)
+
+                        # Rate limiting between individual job fetches
+                        if settings.request_delay > 0:
+                            import asyncio
+                            await asyncio.sleep(settings.request_delay)
+
+                    except Exception as e:
+                        logger.debug(f"Failed to parse FINN job {job_url}: {e}")
+                        continue
+
+                logger.info(f"Successfully scraped {len(jobs)} jobs for keyword '{keyword}'")
 
         except httpx.HTTPError as e:
             logger.error(f"HTTP error scraping FINN.no: {e}")
@@ -75,42 +105,78 @@ class FINNScraper:
 
         return jobs
 
-    def _parse_job_listing(self, listing: BeautifulSoup, keyword: str) -> Optional[Dict]:
+    async def _fetch_and_parse_job(self, client: httpx.AsyncClient, url: str, search_keyword: str) -> Optional[Dict]:
         """
-        Parse a single job listing from FINN.no
+        Fetch and parse a single FINN job page
 
         Args:
-            listing: BeautifulSoup element containing job listing
-            keyword: The keyword that found this job
+            client: HTTP client to use for request
+            url: FINN.no job posting URL
+            search_keyword: The keyword that found this job
 
         Returns:
             Dictionary with job data or None if parsing fails
         """
         try:
-            # Extract title
-            title_elem = listing.find('h2', class_='text-18') or listing.find('a', class_='sf-search-ad-link')
-            title = title_elem.get_text(strip=True) if title_elem else None
+            response = await client.get(url, headers=self.headers)
+            response.raise_for_status()
 
-            # Extract URL
-            link_elem = listing.find('a', class_='sf-search-ad-link')
-            url = f"https://www.finn.no{link_elem['href']}" if link_elem and 'href' in link_elem.attrs else None
+            soup = BeautifulSoup(response.content, 'lxml')
+
+            # Extract title
+            title_element = soup.select_one('h2.t2')
+            if not title_element:
+                logger.debug(f"No title found for {url}")
+                return None
+            title = title_element.get_text(strip=True)
 
             # Extract company
-            company_elem = listing.find('div', class_='text-caption') or listing.find('span', class_='company-name')
-            company = company_elem.get_text(strip=True) if company_elem else "Unknown"
+            company_element = soup.select_one('section.mt-16 p.mb-24')
+            company = company_element.get_text(strip=True) if company_element else "Unknown"
 
             # Extract location
-            location_elem = listing.find('div', class_='text-12') or listing.find('span', class_='location')
-            location = location_elem.get_text(strip=True) if location_elem else None
+            location_element = soup.select_one('a[href*="location="]')
+            location = location_element.get_text(strip=True) if location_element else "Unknown"
+
+            # Extract job type
+            job_type = None
+            for li in soup.find_all('li'):
+                if 'flex' in li.get('class', []) and 'flex-col' in li.get('class', []):
+                    text = li.get_text(strip=True)
+                    if 'Ansettelsesform' in text:
+                        span = li.find('span', class_='font-bold')
+                        if span:
+                            job_type = span.get_text(strip=True)
+                            break
+
+            # Extract deadline
+            deadline = None
+            for li in soup.find_all('li'):
+                if 'flex' in li.get('class', []) and 'flex-col' in li.get('class', []):
+                    text = li.get_text(strip=True)
+                    if 'Frist' in text:
+                        span = li.find('span', class_='font-bold')
+                        if span:
+                            deadline = span.get_text(strip=True)
+                            break
 
             # Extract published date
-            published_elem = listing.find('span', class_='sf-search-ad-published')
-            published = published_elem.get_text(strip=True) if published_elem else None
+            published = None
+            for li in soup.find_all('li'):
+                classes = li.get('class', [])
+                if 'flex' in classes and 'gap-x-16' in classes:
+                    text = li.get_text(strip=True)
+                    if 'Sist endret' in text:
+                        time_tag = li.find('time')
+                        if time_tag:
+                            published = time_tag.get_text(strip=True)
+                            break
 
-            # Validate required fields
-            if not title or not url:
-                logger.warning("Skipping job listing - missing title or URL")
-                return None
+            # Extract full job description
+            description = None
+            description_element = soup.select_one('div.import-decoration')
+            if description_element:
+                description = description_element.get_text(separator='\n', strip=True)
 
             return {
                 'title': title,
@@ -118,71 +184,21 @@ class FINNScraper:
                 'location': location,
                 'url': url,
                 'source': 'FINN',
-                'keywords': keyword,
+                'keywords': search_keyword,
+                'deadline': deadline,
+                'job_type': job_type,
                 'published': published,
-                'deadline': None,  # FINN doesn't always show deadline in listings
-                'job_type': None,   # Extract from detail page if needed
-                'description': None,  # Need to fetch detail page
-                'summary': None,      # Will be generated by AI service
+                'description': description,
+                'summary': None,  # Will be generated by AI service
                 'scraped_date': datetime.now(),
                 'status': 'ACTIVE',
             }
 
-        except Exception as e:
-            logger.error(f"Error parsing FINN job listing: {e}")
-            return None
-
-    async def fetch_job_details(self, url: str) -> Optional[Dict]:
-        """
-        Fetch full job details from a FINN.no job posting URL
-
-        Args:
-            url: FINN.no job posting URL
-
-        Returns:
-            Dictionary with detailed job information
-        """
-        try:
-            async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
-                response = await client.get(url, headers=self.headers)
-                response.raise_for_status()
-
-                soup = BeautifulSoup(response.content, 'html.parser')
-
-                # Extract description
-                description_elem = soup.find('div', class_='import-decoration') or \
-                                 soup.find('div', class_='u-word-break') or \
-                                 soup.find('section', class_='panel')
-
-                description = description_elem.get_text(strip=True) if description_elem else None
-
-                # Extract deadline
-                deadline_elem = soup.find('dt', string='Søknadsfrist')
-                if deadline_elem:
-                    deadline_value = deadline_elem.find_next_sibling('dd')
-                    deadline = deadline_value.get_text(strip=True) if deadline_value else None
-                else:
-                    deadline = None
-
-                # Extract job type
-                job_type_elem = soup.find('dt', string='Stillingsfunksjon')
-                if job_type_elem:
-                    job_type_value = job_type_elem.find_next_sibling('dd')
-                    job_type = job_type_value.get_text(strip=True) if job_type_value else None
-                else:
-                    job_type = None
-
-                return {
-                    'description': description,
-                    'deadline': deadline,
-                    'job_type': job_type,
-                }
-
         except httpx.HTTPError as e:
-            logger.error(f"HTTP error fetching FINN job details: {e}")
+            logger.debug(f"HTTP error fetching FINN job {url}: {e}")
             return None
         except Exception as e:
-            logger.error(f"Error fetching FINN job details: {e}")
+            logger.debug(f"Error parsing FINN job {url}: {e}")
             return None
 
     async def scrape_all_keywords(self, keywords: List[str] = None, limit_per_keyword: int = None) -> List[Dict]:
