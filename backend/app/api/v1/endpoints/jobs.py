@@ -23,6 +23,7 @@ async def get_jobs(
     is_hidden: Optional[bool] = Query(False, description="Include hidden jobs"),
     applied: Optional[bool] = Query(None, description="Filter by applied status"),
     status: Optional[str] = Query(None, description="Filter by status"),
+    date_range: Optional[str] = Query(None, description="Filter by date range (7days, 30days, 3months, all)"),
     skip: int = Query(0, ge=0, description="Pagination offset"),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit"),
     db: Session = Depends(get_db),
@@ -51,6 +52,7 @@ async def get_jobs(
         is_hidden=is_hidden,
         applied=applied,
         status=status,
+        date_range=date_range,
         skip=skip,
         limit=limit,
     )

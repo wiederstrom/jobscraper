@@ -34,6 +34,7 @@ class JobRepository(BaseRepository[Job]):
         is_hidden: Optional[bool] = False,
         applied: Optional[bool] = None,
         status: Optional[str] = None,
+        date_range: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
     ) -> List[Job]:
@@ -48,6 +49,7 @@ class JobRepository(BaseRepository[Job]):
             is_hidden: Filter by hidden status (default: False to exclude hidden)
             applied: Filter by applied status
             status: Filter by job status (ACTIVE, INACTIVE, EXPIRED)
+            date_range: Filter by date range (7days, 30days, 3months, all)
             skip: Pagination offset
             limit: Pagination limit
 
@@ -83,6 +85,20 @@ class JobRepository(BaseRepository[Job]):
 
         if status:
             query = query.filter(Job.status == status)
+
+        # Date range filter
+        if date_range and date_range != 'all':
+            if date_range == '7days':
+                cutoff = datetime.now() - timedelta(days=7)
+            elif date_range == '30days':
+                cutoff = datetime.now() - timedelta(days=30)
+            elif date_range == '3months':
+                cutoff = datetime.now() - timedelta(days=90)
+            else:
+                cutoff = None
+
+            if cutoff:
+                query = query.filter(Job.scraped_date >= cutoff)
 
         # Order by scraped_date descending (newest first)
         query = query.order_by(desc(Job.scraped_date))
@@ -186,6 +202,7 @@ class JobRepository(BaseRepository[Job]):
         # Jobs by status
         active_count = query.filter(Job.status == "ACTIVE").count()
         inactive_count = query.filter(Job.status == "INACTIVE").count()
+        expired_count = query.filter(Job.status == "EXPIRED").count()
 
         # New jobs last 7 days
         seven_days_ago = datetime.now() - timedelta(days=7)
@@ -202,6 +219,7 @@ class JobRepository(BaseRepository[Job]):
             "status": {
                 "ACTIVE": active_count,
                 "INACTIVE": inactive_count,
+                "EXPIRED": expired_count,
             },
             "new_last_7_days": new_jobs,
         }

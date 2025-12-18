@@ -15,6 +15,7 @@ class StatusStats(BaseModel):
     """Statistics by status"""
     ACTIVE: int
     INACTIVE: int
+    EXPIRED: int
 
 
 class JobStatistics(BaseModel):
