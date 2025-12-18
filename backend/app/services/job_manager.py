@@ -85,12 +85,9 @@ class JobManager:
 
                         if not is_relevant:
                             # Add to irrelevant cache
-                            self.irrelevant_repo.add(
-                                url=job_data['url'],
-                                reason=explanation
-                            )
+                            self.irrelevant_repo.add(url=job_data['url'])
                             stats['jobs_filtered'] += 1
-                            logger.info(f"Filtered out: {job_data['title']}")
+                            logger.info(f"Filtered out: {job_data['title']} - {explanation}")
                             continue
 
                         # Generate summary (if enabled)
@@ -191,12 +188,9 @@ class JobManager:
 
                         if not is_relevant:
                             # Add to irrelevant cache
-                            self.irrelevant_repo.add(
-                                url=job_data['url'],
-                                reason=explanation
-                            )
+                            self.irrelevant_repo.add(url=job_data['url'])
                             stats['jobs_filtered'] += 1
-                            logger.info(f"Filtered out: {job_data['title']}")
+                            logger.info(f"Filtered out: {job_data['title']} - {explanation}")
                             continue
 
                         # Generate summary (if enabled)
