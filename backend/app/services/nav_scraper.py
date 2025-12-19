@@ -67,34 +67,47 @@ class NAVScraper:
                 # Parse the HTML
                 soup = BeautifulSoup(response.content, 'lxml')
 
-                # The page contains embedded JSON data with job listings
-                # Look for the Next.js data script
+                # Try to find embedded JSON data in various formats
+                ads = []
+
+                # Method 1: Look for __NEXT_DATA__ script
                 scripts = soup.find_all('script', id='__NEXT_DATA__')
-
                 if scripts:
-                    data_script = scripts[0]
                     try:
-                        page_data = json.loads(data_script.string)
-
-                        # Extract job listings from the embedded data
+                        page_data = json.loads(scripts[0].string)
                         props = page_data.get('props', {}).get('pageProps', {})
                         search_result = props.get('searchResult', {})
                         ads = search_result.get('ads', [])
-
-                        logger.info(f"Found {len(ads)} jobs for keyword '{keyword}' in {location}")
-
-                        for ad in ads[:limit]:
-                            job = self._parse_job_from_data(ad, keyword)
-                            if job:
-                                jobs.append(job)
-
                     except (json.JSONDecodeError, KeyError) as e:
-                        logger.error(f"Error parsing embedded job data: {e}")
-                        # Fallback to HTML parsing
-                        jobs = await self._parse_jobs_from_html(soup, keyword, limit)
+                        logger.debug(f"__NEXT_DATA__ parsing failed: {e}")
+
+                # Method 2: Look for JSON in other script tags
+                if not ads:
+                    all_scripts = soup.find_all('script', type='application/json')
+                    for script in all_scripts:
+                        try:
+                            script_data = json.loads(script.string)
+                            # Look for ads array in various locations
+                            if isinstance(script_data, dict):
+                                if 'ads' in script_data:
+                                    ads = script_data['ads']
+                                    break
+                                elif 'searchResult' in script_data:
+                                    ads = script_data.get('searchResult', {}).get('ads', [])
+                                    break
+                        except:
+                            continue
+
+                if ads:
+                    logger.info(f"Found {len(ads)} jobs from embedded JSON for keyword '{keyword}'")
+                    for ad in ads[:limit]:
+                        job = self._parse_job_from_data(ad, keyword)
+                        if job:
+                            jobs.append(job)
                 else:
-                    # Fallback to HTML parsing
-                    jobs = await self._parse_jobs_from_html(soup, keyword, limit)
+                    # Fallback: Parse HTML and fetch individual job pages
+                    logger.info(f"No embedded JSON found, falling back to HTML parsing")
+                    jobs = await self._parse_jobs_from_html_and_fetch(soup, keyword, limit)
 
         except httpx.HTTPError as e:
             logger.error(f"HTTP error searching NAV for '{keyword}': {e}")
@@ -161,9 +174,9 @@ class NAVScraper:
             logger.error(f"Error parsing job from data: {e}")
             return None
 
-    async def _parse_jobs_from_html(self, soup: BeautifulSoup, keyword: str, limit: int) -> List[Dict]:
+    async def _parse_jobs_from_html_and_fetch(self, soup: BeautifulSoup, keyword: str, limit: int) -> List[Dict]:
         """
-        Fallback: Parse jobs from HTML when JSON data is not available
+        Fallback: Parse job URLs from HTML and fetch individual pages
 
         Args:
             soup: BeautifulSoup object
@@ -178,9 +191,14 @@ class NAVScraper:
         # Find job listing links
         job_links = soup.find_all('a', href=re.compile(r'/stillinger/stilling/'))
 
-        logger.info(f"Found {len(job_links)} job links in HTML")
+        logger.info(f"Found {len(job_links)} job links in HTML, fetching details...")
 
-        for link in job_links[:limit]:
+        seen_uuids = set()
+
+        for link in job_links[:limit * 2]:  # Get more links since there might be duplicates
+            if len(jobs) >= limit:
+                break
+
             href = link.get('href')
             if not href:
                 continue
@@ -192,35 +210,89 @@ class NAVScraper:
 
             uuid = uuid_match.group(1)
 
+            # Skip duplicates
+            if uuid in seen_uuids:
+                continue
+            seen_uuids.add(uuid)
+
             # Build full URL
             if not href.startswith('http'):
                 url = f"{self.BASE_URL}{href}"
             else:
                 url = href
 
-            # Try to extract title from link text or nearby elements
-            title = link.get_text(strip=True)
-            if not title:
-                title = "Job Listing"
+            # Fetch the individual job page to get full details
+            job = await self._fetch_job_page(url, uuid, keyword)
+            if job:
+                jobs.append(job)
 
-            jobs.append({
-                'title': title,
-                'company': 'Unknown',
-                'location': 'Unknown',
-                'url': url,
-                'source': 'NAV',
-                'keywords': keyword,
-                'deadline': None,
-                'job_type': None,
-                'published': None,
-                'description': None,
-                'summary': None,
-                'scraped_date': datetime.now(),
-                'external_id': uuid,
-                'status': 'ACTIVE',
-            })
+            # Rate limiting
+            if settings.request_delay > 0:
+                import asyncio
+                await asyncio.sleep(settings.request_delay)
 
+        logger.info(f"Fetched details for {len(jobs)} jobs")
         return jobs
+
+    async def _fetch_job_page(self, url: str, uuid: str, keyword: str) -> Optional[Dict]:
+        """
+        Fetch and parse an individual job page
+
+        Args:
+            url: Job page URL
+            uuid: Job UUID
+            keyword: Search keyword
+
+        Returns:
+            Parsed job dictionary or None
+        """
+        try:
+            async with httpx.AsyncClient(timeout=settings.request_timeout, follow_redirects=True) as client:
+                response = await client.get(url, headers=self.headers)
+                response.raise_for_status()
+
+                soup = BeautifulSoup(response.content, 'lxml')
+
+                # Try to find embedded JSON data with job details
+                scripts = soup.find_all('script', type='application/json')
+                for script in scripts:
+                    try:
+                        data = json.loads(script.string)
+                        # Look for job ad data
+                        if isinstance(data, dict) and 'stilling' in data:
+                            ad_data = data.get('stilling', {})
+                            return self._parse_job_from_data(ad_data, keyword)
+                    except:
+                        continue
+
+                # Fallback: Parse from HTML
+                title = soup.find('h1')
+                title_text = title.get_text(strip=True) if title else "Job Listing"
+
+                # Try to find description
+                description_elem = soup.find('div', class_=re.compile(r'description|content|ad-text'))
+                description = description_elem.get_text(strip=True) if description_elem else None
+
+                return {
+                    'title': title_text,
+                    'company': 'Unknown',
+                    'location': 'Bergen',  # Default since we filtered by Bergen
+                    'url': url,
+                    'source': 'NAV',
+                    'keywords': keyword,
+                    'deadline': None,
+                    'job_type': None,
+                    'published': None,
+                    'description': description,
+                    'summary': None,
+                    'scraped_date': datetime.now(),
+                    'external_id': uuid,
+                    'status': 'ACTIVE',
+                }
+
+        except Exception as e:
+            logger.error(f"Error fetching job page {url}: {e}")
+            return None
 
     async def scrape_all_keywords(
         self,
