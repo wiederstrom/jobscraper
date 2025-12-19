@@ -50,13 +50,14 @@ class NAVScraper:
             logger.error(f"Error fetching public token: {e}")
             return None
 
-    async def fetch_feed(self, feed_id: str = None, etag: str = None) -> Optional[Dict]:
+    async def fetch_feed(self, feed_id: str = None, etag: str = None, last: bool = True) -> Optional[Dict]:
         """
         Fetch a feed page from NAV API
 
         Args:
             feed_id: Specific feed ID to fetch (optional, fetches latest if None)
             etag: ETag for conditional request (returns 304 if not modified)
+            last: If True, fetch the newest page instead of first page (default True)
 
         Returns:
             Feed dictionary or None if fetch fails
@@ -79,6 +80,9 @@ class NAVScraper:
         url = f"{self.BASE_URL}/feed"
         if feed_id:
             url = f"{self.BASE_URL}/feed/{feed_id}"
+        elif last:
+            # Fetch the newest page by default
+            url = f"{self.BASE_URL}/feed?last=true"
 
         try:
             async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
