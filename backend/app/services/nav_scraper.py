@@ -169,14 +169,16 @@ class NAVScraper:
         Check if job matches any of the keywords
 
         Args:
-            job: Job dictionary
+            job: Job entry dictionary (with ad_content)
             keywords: List of keywords to match
 
         Returns:
             Matching keyword or None
         """
-        title = job.get('title', '').lower()
-        description = job.get('adText', '').lower() if 'adText' in job else ''
+        # Get data from ad_content
+        ad_content = job.get('ad_content', {})
+        title = ad_content.get('title', '').lower()
+        description = ad_content.get('description', '').lower()
 
         for keyword in keywords:
             keyword_lower = keyword.lower()
@@ -217,11 +219,28 @@ class NAVScraper:
             published = None
 
             if job_entry:
-                description = job_entry.get('adText') or job_entry.get('description')
-                properties = job_entry.get('properties', {})
+                # The actual data is nested in 'ad_content'
+                ad_content = job_entry.get('ad_content', {})
+
+                # Get title from ad_content (more reliable than feed)
+                if ad_content.get('title'):
+                    title = ad_content.get('title')
+
+                description = ad_content.get('description')
+                properties = ad_content.get('properties', {})
                 job_type = properties.get('extent')
-                published = job_entry.get('published')
-                deadline = job_entry.get('applicationDue')
+                published = ad_content.get('published')
+                deadline = ad_content.get('applicationDue')
+
+                # Get location from workLocations
+                work_locations = ad_content.get('workLocations', [])
+                if work_locations:
+                    municipal = work_locations[0].get('municipal', municipal)
+
+                # Get company/employer from ad_content
+                employer = ad_content.get('employer', {})
+                if employer and employer.get('name'):
+                    company = employer.get('name')
 
             return {
                 'title': title,
