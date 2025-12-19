@@ -248,7 +248,8 @@ class NAVScraper:
         self,
         keywords: List[str] = None,
         limit: int = None,
-        last_etag: str = None
+        last_etag: str = None,
+        max_pages: int = 10
     ) -> tuple[List[Dict], Optional[str]]:
         """
         Scrape NAV jobs for all keywords
@@ -257,6 +258,7 @@ class NAVScraper:
             keywords: List of keywords to search (default from settings)
             limit: Maximum total jobs to fetch (optional)
             last_etag: ETag from last fetch for incremental sync
+            max_pages: Maximum number of feed pages to process (default 10)
 
         Returns:
             Tuple of (list of jobs, new_etag)
@@ -267,7 +269,7 @@ class NAVScraper:
 
         logger.info(f"Starting NAV scraping with {len(keywords)} keywords")
 
-        # Fetch the feed
+        # Fetch the first (newest) page
         feed_data = await self.fetch_feed(etag=last_etag)
 
         if not feed_data:
@@ -278,18 +280,57 @@ class NAVScraper:
             logger.info("NAV feed not modified since last fetch")
             return [], last_etag
 
-        # Process feed items
-        items = feed_data.get('items', [])
-        logger.info(f"Processing {len(items)} items from NAV feed")
+        # Process multiple pages to get more recent jobs
+        pages_processed = 0
+        current_feed = feed_data
 
-        # Debug: Log location data from first few items
-        if items:
-            logger.info("=== DEBUG: Checking location data in feed items ===")
-            for i, item in enumerate(items[:5]):
-                feed_entry = item.get('_feed_entry', {})
-                logger.info(f"Item {i+1}: municipal={feed_entry.get('municipal')}, county={feed_entry.get('county')}, status={feed_entry.get('status')}")
-            logger.info("=== END DEBUG ===")
+        while current_feed and pages_processed < max_pages:
+            items = current_feed.get('items', [])
+            logger.info(f"Processing page {pages_processed + 1}: {len(items)} items")
 
+            # Process items in this page
+            all_jobs.extend(await self._process_feed_items(items, keywords, limit, len(all_jobs)))
+
+            # Check if we've hit the limit
+            if limit and len(all_jobs) >= limit:
+                break
+
+            # Get next page (going backward in time from newest)
+            next_id = current_feed.get('next_id')
+            if not next_id:
+                break
+
+            pages_processed += 1
+            current_feed = await self.fetch_feed(feed_id=next_id)
+
+            # Rate limiting between pages
+            if settings.request_delay > 0:
+                import asyncio
+                await asyncio.sleep(settings.request_delay)
+
+        logger.info(f"Processed {pages_processed + 1} feed pages")
+        return all_jobs, new_etag
+
+    async def _process_feed_items(
+        self,
+        items: List[Dict],
+        keywords: List[str],
+        limit: Optional[int],
+        current_count: int
+    ) -> List[Dict]:
+        """
+        Process items from a feed page
+
+        Args:
+            items: List of feed items
+            keywords: Keywords to match
+            limit: Maximum total jobs
+            current_count: Current number of jobs already collected
+
+        Returns:
+            List of processed jobs
+        """
+        jobs = []
         location_passed = 0
         status_passed = 0
         keyword_passed = 0
@@ -322,10 +363,10 @@ class NAVScraper:
             # Parse job
             job = self.parse_job(item, job_entry, matched_keyword)
             if job:
-                all_jobs.append(job)
+                jobs.append(job)
 
             # Check limit
-            if limit and len(all_jobs) >= limit:
+            if limit and (current_count + len(jobs)) >= limit:
                 break
 
             # Rate limiting
@@ -333,15 +374,5 @@ class NAVScraper:
                 import asyncio
                 await asyncio.sleep(settings.request_delay)
 
-        # Get new ETag for next fetch (TODO: implement ETag extraction)
-        # new_etag = response headers would have ETag
-
-        logger.info(f"=== NAV Filter Results ===")
-        logger.info(f"Total items: {len(items)}")
-        logger.info(f"Passed location filter: {location_passed}")
-        logger.info(f"Passed status filter: {status_passed}")
-        logger.info(f"Passed keyword filter: {keyword_passed}")
-        logger.info(f"Final jobs scraped: {len(all_jobs)}")
-        logger.info(f"=========================")
-
-        return all_jobs, new_etag
+        logger.info(f"Page results: {len(items)} items -> {location_passed} location -> {status_passed} active -> {keyword_passed} keywords -> {len(jobs)} jobs")
+        return jobs
