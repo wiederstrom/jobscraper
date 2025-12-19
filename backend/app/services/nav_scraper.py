@@ -296,18 +296,18 @@ class NAVScraper:
                 continue
             location_passed += 1
 
-            # Fetch full job details to check actual status
+            # Filter by status - only ACTIVE jobs (check feed_entry status)
             feed_entry = item.get('_feed_entry', {})
+            if feed_entry.get('status') != 'ACTIVE':
+                continue
+            status_passed += 1
+
+            # Fetch full job details
             uuid = feed_entry.get('uuid') or item.get('id')
             job_entry = await self.fetch_job_entry(uuid)
 
             if not job_entry:
                 continue
-
-            # Filter by status - only ACTIVE jobs (check in job_entry, not feed)
-            if job_entry.get('status') != 'ACTIVE':
-                continue
-            status_passed += 1
 
             # Filter by keywords
             matched_keyword = self.filter_by_keywords(job_entry, keywords)

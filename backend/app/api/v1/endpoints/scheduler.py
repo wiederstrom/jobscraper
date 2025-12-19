@@ -160,6 +160,8 @@ async def debug_nav_feed(limit: int = 10) -> Dict[str, Any]:
             'county': feed_entry.get('county'),
             'status': feed_entry.get('status'),
             'businessName': feed_entry.get('businessName'),
+            'published': feed_entry.get('published'),
+            'updated': item.get('updated'),
         })
 
     return {
