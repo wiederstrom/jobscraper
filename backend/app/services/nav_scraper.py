@@ -271,15 +271,29 @@ class NAVScraper:
         items = feed_data.get('items', [])
         logger.info(f"Processing {len(items)} items from NAV feed")
 
+        # Debug: Log location data from first few items
+        if items:
+            logger.info("=== DEBUG: Checking location data in feed items ===")
+            for i, item in enumerate(items[:5]):
+                feed_entry = item.get('_feed_entry', {})
+                logger.info(f"Item {i+1}: municipal={feed_entry.get('municipal')}, county={feed_entry.get('county')}, status={feed_entry.get('status')}")
+            logger.info("=== END DEBUG ===")
+
+        location_passed = 0
+        status_passed = 0
+        keyword_passed = 0
+
         for item in items:
             # Filter by location
             if not self.filter_by_location(item):
                 continue
+            location_passed += 1
 
             # Filter by status - only ACTIVE jobs
             feed_entry = item.get('_feed_entry', {})
             if feed_entry.get('status') != 'ACTIVE':
                 continue
+            status_passed += 1
 
             # Fetch full job details
             uuid = feed_entry.get('uuid') or item.get('id')
@@ -292,6 +306,7 @@ class NAVScraper:
             matched_keyword = self.filter_by_keywords(job_entry, keywords)
             if not matched_keyword:
                 continue
+            keyword_passed += 1
 
             # Parse job
             job = self.parse_job(item, job_entry, matched_keyword)
@@ -310,5 +325,12 @@ class NAVScraper:
         # Get new ETag for next fetch (TODO: implement ETag extraction)
         # new_etag = response headers would have ETag
 
-        logger.info(f"Scraped {len(all_jobs)} matching jobs from NAV")
+        logger.info(f"=== NAV Filter Results ===")
+        logger.info(f"Total items: {len(items)}")
+        logger.info(f"Passed location filter: {location_passed}")
+        logger.info(f"Passed status filter: {status_passed}")
+        logger.info(f"Passed keyword filter: {keyword_passed}")
+        logger.info(f"Final jobs scraped: {len(all_jobs)}")
+        logger.info(f"=========================")
+
         return all_jobs, new_etag
