@@ -50,7 +50,7 @@ class NAVScraper:
             logger.error(f"Error fetching public token: {e}")
             return None
 
-    async def fetch_feed(self, feed_id: str = None, etag: str = None, last: bool = True) -> Optional[Dict]:
+    async def fetch_feed(self, feed_id: str = None, etag: str = None, last: bool = True, modified_since: str = None) -> Optional[Dict]:
         """
         Fetch a feed page from NAV API
 
@@ -58,6 +58,7 @@ class NAVScraper:
             feed_id: Specific feed ID to fetch (optional, fetches latest if None)
             etag: ETag for conditional request (returns 304 if not modified)
             last: If True, fetch the newest page instead of first page (default True)
+            modified_since: RFC 1123 datetime string to fetch only jobs modified after this date
 
         Returns:
             Feed dictionary or None if fetch fails
@@ -76,6 +77,9 @@ class NAVScraper:
 
         if etag:
             headers['If-None-Match'] = etag
+
+        if modified_since:
+            headers['If-Modified-Since'] = modified_since
 
         url = f"{self.BASE_URL}/feed"
         if feed_id:
@@ -286,10 +290,17 @@ class NAVScraper:
         all_jobs = []
         new_etag = None
 
-        logger.info(f"Starting NAV scraping with {len(keywords)} keywords")
+        logger.info(f"Starting NAV scraping with {len(keywords)} keywords, max_pages={max_pages}")
 
-        # Fetch the first (newest) page
-        feed_data = await self.fetch_feed(etag=last_etag)
+        # Use If-Modified-Since to get jobs from the last 30 days
+        from datetime import datetime, timedelta
+        since_date = datetime.now() - timedelta(days=30)
+        # RFC 1123 format: "Sun, 01 Dec 2024 00:00:00 GMT"
+        modified_since = since_date.strftime('%a, %d %b %Y %H:%M:%S GMT')
+        logger.info(f"Fetching jobs modified since: {modified_since}")
+
+        # Start from first page with date filter
+        feed_data = await self.fetch_feed(last=False, etag=last_etag, modified_since=modified_since)
 
         if not feed_data:
             logger.error("Failed to fetch NAV feed")
@@ -299,7 +310,7 @@ class NAVScraper:
             logger.info("NAV feed not modified since last fetch")
             return [], last_etag
 
-        # Process multiple pages to get more recent jobs
+        # Process pages one by one
         pages_processed = 0
         current_feed = feed_data
 
@@ -314,20 +325,21 @@ class NAVScraper:
             if limit and len(all_jobs) >= limit:
                 break
 
-            # Get next page (going backward in time from newest)
+            # Get next page
             next_id = current_feed.get('next_id')
             if not next_id:
+                logger.info("Reached end of feed (no more pages)")
                 break
 
             pages_processed += 1
-            current_feed = await self.fetch_feed(feed_id=next_id)
+            current_feed = await self.fetch_feed(feed_id=next_id, last=False)
 
             # Rate limiting between pages
             if settings.request_delay > 0:
                 import asyncio
                 await asyncio.sleep(settings.request_delay)
 
-        logger.info(f"Processed {pages_processed + 1} feed pages")
+        logger.info(f"Processed {pages_processed + 1} pages, found {len(all_jobs)} matching jobs")
         return all_jobs, new_etag
 
     async def _process_feed_items(
