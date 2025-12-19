@@ -150,8 +150,15 @@ class NAVScraper:
         target_municipal = settings.nav_municipal.upper()
         target_county = settings.nav_county.upper()
 
-        # Match if municipal or county matches
-        return municipal == target_municipal or county == target_county or municipal == target_county
+        # Extract just the city name from VESTLAND.BERGEN format
+        # The feed uses simple names like "BERGEN", not "VESTLAND.BERGEN"
+        if '.' in target_municipal:
+            target_city = target_municipal.split('.')[-1]  # Get "BERGEN" from "VESTLAND.BERGEN"
+        else:
+            target_city = target_municipal
+
+        # Match if municipal matches the city name or county
+        return municipal == target_city or municipal == target_municipal or county == target_county
 
     def filter_by_keywords(self, job: Dict, keywords: List[str]) -> Optional[str]:
         """
@@ -289,18 +296,18 @@ class NAVScraper:
                 continue
             location_passed += 1
 
-            # Filter by status - only ACTIVE jobs
+            # Fetch full job details to check actual status
             feed_entry = item.get('_feed_entry', {})
-            if feed_entry.get('status') != 'ACTIVE':
-                continue
-            status_passed += 1
-
-            # Fetch full job details
             uuid = feed_entry.get('uuid') or item.get('id')
             job_entry = await self.fetch_job_entry(uuid)
 
             if not job_entry:
                 continue
+
+            # Filter by status - only ACTIVE jobs (check in job_entry, not feed)
+            if job_entry.get('status') != 'ACTIVE':
+                continue
+            status_passed += 1
 
             # Filter by keywords
             matched_keyword = self.filter_by_keywords(job_entry, keywords)
