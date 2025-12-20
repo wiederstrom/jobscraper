@@ -236,7 +236,7 @@ class NAVScraper:
 
     async def _fetch_job_page(self, url: str, uuid: str, keyword: str) -> Optional[Dict]:
         """
-        Fetch and parse an individual job page
+        Fetch and parse an individual job using NAV public API
 
         Args:
             url: Job page URL
@@ -247,42 +247,46 @@ class NAVScraper:
             Parsed job dictionary or None
         """
         try:
+            # Use NAV public API to fetch job details
+            api_url = f"https://arbeidsplassen.nav.no/public-api/ad/{uuid}"
+
             async with httpx.AsyncClient(timeout=settings.request_timeout, follow_redirects=True) as client:
-                response = await client.get(url, headers=self.headers)
+                response = await client.get(api_url, headers={'Accept': 'application/json'})
                 response.raise_for_status()
 
-                soup = BeautifulSoup(response.content, 'lxml')
+                job_data = response.json()
 
-                # Try to find embedded JSON data with job details
-                scripts = soup.find_all('script', type='application/json')
-                for script in scripts:
-                    try:
-                        data = json.loads(script.string)
-                        # Look for job ad data
-                        if isinstance(data, dict) and 'stilling' in data:
-                            ad_data = data.get('stilling', {})
-                            return self._parse_job_from_data(ad_data, keyword)
-                    except:
-                        continue
+                # Extract data from the API response
+                title = job_data.get('title', 'Job Listing')
 
-                # Fallback: Parse from HTML
-                title = soup.find('h1')
-                title_text = title.get_text(strip=True) if title else "Job Listing"
+                # Get employer/company
+                employer = job_data.get('employer', {})
+                company = employer.get('name', 'Unknown')
 
-                # Try to find description
-                description_elem = soup.find('div', class_=re.compile(r'description|content|ad-text'))
-                description = description_elem.get_text(strip=True) if description_elem else None
+                # Get location
+                location_list = job_data.get('locationList', [])
+                location = location_list[0] if location_list else 'Bergen'
+
+                # Get dates
+                published = job_data.get('published')
+                expires = job_data.get('expires')
+                application_due = job_data.get('applicationDue')
+
+                # Get description and other details
+                description = job_data.get('description')
+                properties = job_data.get('properties', {})
+                job_type = properties.get('extent')
 
                 return {
-                    'title': title_text,
-                    'company': 'Unknown',
-                    'location': 'Bergen',  # Default since we filtered by Bergen
+                    'title': title,
+                    'company': company,
+                    'location': location,
                     'url': url,
                     'source': 'NAV',
                     'keywords': keyword,
-                    'deadline': None,
-                    'job_type': None,
-                    'published': None,
+                    'deadline': application_due or expires,
+                    'job_type': job_type,
+                    'published': published,
                     'description': description,
                     'summary': None,
                     'scraped_date': datetime.now(),
@@ -290,8 +294,11 @@ class NAVScraper:
                     'status': 'ACTIVE',
                 }
 
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error fetching job {uuid} from API: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Error fetching job page {url}: {e}")
+            logger.error(f"Error fetching job {uuid}: {e}")
             return None
 
     async def scrape_all_keywords(
